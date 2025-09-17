@@ -1,0 +1,299 @@
+---
+title: "Stat 145 Problem Set 1"
+author: "Anne Christine Amores"
+date: "2025-08-27"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(stats)
+library(trend)
+library(tseries)
+library(forecast)
+library(uroot)
+library(moments)
+```
+
+## 1. Importing
+
+```{r}
+# Importing the datasets
+
+# TS1
+ts1 <- read.csv("TS1.csv")
+# TS2
+ts2 <- read.csv("TS2.csv")
+
+head(ts1)
+head(ts2)
+```
+
+## 2. Plotting
+
+```{r}
+# Plotting the time series for both datasets
+
+# TS1
+series1 <- ts(ts1$y, start=c(2005,1), frequency = 12)
+plot.ts(series1, main = "Time Series 1 Plot", ylab = "Value")
+
+# TS2
+series2 <- ts(ts2$y, start=c(2005,1), frequency = 12)
+plot.ts(series2, main = "Time Series 2 Plot", ylab = "Value")
+```
+
+## 3. Trend
+
+Based on visual inspection, there seems to be an upward trend for both series. To confirm, we conduct formal tests. Firstly, for the parametric test:
+
+**Linear regression:**
+
+Let
+
+$$
+H_o: \beta_1=0
+$$
+
+$$
+H_1: \beta_1 \neq{0} 
+$$
+
+Decision rule: Reject $H_o$ if p-value \< 0.05.
+
+```{r}
+# Creating a time index
+
+# TS1
+ts1$date <- 1:nrow(ts1)
+# TS2
+ts2$date <- 1:nrow(ts2)
+
+# Conducting formal testing - parametric
+# Linear Regresion Model
+
+# TS1
+trend1_par <- lm(y ~ date, ts1)
+summary(trend1_par)
+# TS2
+trend2_par <- lm(y ~ date, ts2)
+summary (trend2_par)
+```
+
+The null hypothesis is rejected for both models, indicating the presence of a linear trend for both series. Conducting a non-parametric test:
+
+### Mann-Kendall Test
+
+Let
+
+$$
+H_0: \text{There is no monotonic trend.}
+$$
+
+$$
+H_a: \text{There is a monotonic trend.}
+$$\
+
+Decision rule: Reject $H_o$ if p-value \< 0.05.
+
+```{r}
+# Conducting formal testing - nonparametric
+# Mann-Kendall Test (from 'trend' package)
+# Two-sided test
+
+# TS1
+mk.test (series1)
+# TS2
+mk.test (series2)
+```
+
+The null hypothesis of the Mann-Kendall trend test is rejected for both series, indicating the presence of a monotonic trend.
+
+Let
+
+$$
+H_0: \text{There is no monotonic trend.}
+$$
+
+$$
+H_a: \text{There is a monotonic upward trend.}
+$$
+
+Decision rule: Reject $H_o$ if p-value \< 0.05.
+
+```{r}
+# One-sided test 
+
+# TS1
+mk.test(series1, alternative = "greater")
+# TS2
+mk.test(series2, alternative = "greater")
+```
+
+More specifically, at $\alpha =0.05$, there is sufficient evidence to conclude that an **upward trend** is present for both series, based on the rejection of the null hypothesis of a one-sided Mann-Kendall trend test (Ho: S = 0; Ha: S\>0).
+
+## 4. Stationarity
+
+The **Augmented Dickey-Fuller test (ADF)** is a statistical test used to determine the stationarity of a time series. Its null hypothesis is that the series has a unit root, and is therefore non-stationary. On the other hand, its alternative hypothesis is that the series does not have a unit root, and is therefore stationary.
+
+(<https://www.machinelearningplus.com/time-series/augmented-dickey-fuller-test/>)
+
+Let\
+$$
+H_o: \text{ The time series is non-stationary.}
+$$
+
+$$
+H_a: \text{ The time series is stationary.}
+$$
+
+Decision rule: Reject $H_o$ if p-value \< 0.05.
+
+```{r}
+# Conducting ADF for both series
+
+# TS1
+adf.test(series1)
+# TS2
+adf.test(series2)
+```
+
+For time series 1, we have sufficient evidence to say, at $\alpha = 0.05$, that the time series is stationary. Meanwhile, for time series 2, there is insufficient evidence to say, at $\alpha=0.05$, that the time series is stationary.
+
+## 5. Seasonality
+
+```{r}
+# Conducting 
+ggseasonplot(series1, year.labels = TRUE, main = "Quarterly Seasonality for Time Series 1", ylab = "Value")
+ggseasonplot(series2, year.labels = TRUE, main = "Quarterly Seasonality for Time Series 2", ylab = "Value")
+```
+
+Based on visual inspection, for Time Series 1, the value rises for all years during March and May. Most years see a rise in value as well for the month of July. Meanwhile, there is a dip in the value for almost all years during the following months: April, June, and September. This suggests that seasonality is present in Time Series 1.
+
+For Time Series 2, the value peaks in November for all years. Meanwhile, the value decreases for all years from April to July. This suggests that seasonality is also present in Time Series 2.
+
+We now perform formal statistical tests to verify.
+
+#### **Seasonal Dummy Models:**
+
+#### Let
+
+$$
+H_0: \text{All } \beta_i =0
+$$
+
+$$
+H_a: \text{At least one } \beta_i \neq 0
+$$
+
+Decision rule: Reject $H_o$ if p-value \< 0.05.
+
+```{r}
+# Parametric test: regression on seasonal dummies
+
+# TS1
+seasonality1 <- lm(series1 ~ seasonaldummy(series1)) #using 'forecast' package
+summary(seasonality1)
+# TS2
+seasonality2 <- lm(series2 ~ seasonaldummy(series2))
+summary(seasonality2)
+```
+
+The model for TS1 has a p-value \< 0.05. Therefore, we reject the null hypothesis. That is, we have sufficient evidence to conclude that seasonality is present in the data.
+
+Meanwhile, TS2 has a p-value \> 0.05. Therefore, we do not reject the null hypothesis. That is, we do not have sufficient evidence to conclude that seasonality is present in the data.
+
+### Kruskal-Wallis Test
+
+Let
+
+$$
+H_o: \text{Time series is not seasonal.}
+$$
+
+$$
+H_a: \text{Time series is seasonal.} 
+$$
+
+As it is, the Kruskal-Wallis test cannot be applied directly because both datasets exhibit a trend; **the trend has to be removed first** to properly test for seasonality.
+
+```{r}
+# Creating data frames where each observation is labeled w/ its month for Kruskal-Wallis Test
+
+# TS1
+df1_2 <- data.frame(
+  value = resid(trend1_par),            #resid() is used to remove trend
+  month = factor(cycle(series1)) 
+)
+# TS2
+df2_2 <- data.frame(
+  value = resid(trend2_par),
+  month = factor(cycle(series2))
+)
+
+# TS1 residuals
+plot(resid(trend1_par), type = "l", main = "Detrended TS1", ylab = "Residuals", xlab = "Time")
+# TS2 residuals
+plot(resid(trend2_par), type = "l", main = "Detrended TS2", ylab = "Residuals", xlab = "Time")
+
+# Kruskal-Wallis Test for Seasonality
+
+# TS1
+kruskal.test(value ~ month, df1_2)
+# TS2
+kruskal.test(value ~ month, df2_2)
+```
+
+The residual plot of Time Series 1 is roughly flat, showing that trend has been removed to some extent. Meanwhile, for Time Series 2, the residual plot shows a convex (or upsidedown cave) shape. This means that a linear trend model is not able to fully remove the trend.
+
+Nevertheless, we proceeded with the Kruskal-Wallis test for Time Series 1 and Time Series 2. This resulted to obtaining a p-value $<<$ 0.05 for both, implying rejection of their null hypotheses. Thus, we have sufficient evidence to conclude that **seasonality is present in both series.**
+
+## 6. Descriptive Statistics
+
+```{r}
+# Histogram for TS1
+ts1_histogram <- hist(ts1$y, main = "Histogram for TS1", xlab = "Value")
+```
+
+```{r}
+# Histogram for TS2
+ts2_histogram <- hist(ts2$y, main = "Histogram for TS2", xlab = "Value")
+```
+
+```{r}
+# Summary Measures
+
+# TS1 
+summary(ts1$y)
+
+# TS2
+summary(ts2$y)
+```
+
+```{r}
+# Measures of Spread for TS1
+
+# TS1 
+sd(ts1$y)
+var(ts1$y)
+```
+
+```{r}
+# Measures of Spread for TS2 
+sd(ts2$y)
+var(ts2$y)
+```
+
+```{r}
+# Measures of Shape for TS1
+skewness(ts1$y)
+kurtosis(ts1$y)
+```
+
+```{r}
+# Measures of Shape for TS2
+skewness(ts2$y)
+kurtosis(ts2$y)
+```
